@@ -69,6 +69,7 @@ endif()
 find_package(CURL REQUIRED)
 
 add_library(tjs STATIC
+    src/blob_store.c
     src/builtins.c
     src/curl-utils.c
     src/curl-websocket.c
