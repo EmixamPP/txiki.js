@@ -6,6 +6,7 @@ const blob = new Blob([worker], { type: 'text/javascript' });
 const url = URL.createObjectURL(blob);
 
 const w = new Worker(url);
+URL.revokeObjectURL(url);
 const timer = setTimeout(() => {
     w.terminate();
 }, 1000);
