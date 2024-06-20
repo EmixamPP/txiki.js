@@ -33,8 +33,6 @@ int main(int argc, char **argv) {
     TJSRuntime *qrt = TJS_NewRuntime();
     CHECK_NOT_NULL(qrt);
 
-    tjs__blobstore_init();
-
     int exit_code = TJS_Run(qrt);
 
     tjs__blobstore_destroy();

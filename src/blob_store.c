@@ -3,28 +3,15 @@
 #include "hash.h"
 #include "private.h"
 
-#include <stdio.h>
-#include <time.h>
-
 static TJSObjectURL *BLOBS_STORE = NULL;
 
-static void generate_random_url(char *dest) {
-    strcpy(dest, "blob:");
-    // 5 is the length of "blob:"
-    for (size_t i = 5; i < OBJECT_URL_SIZE; i++) {
-        size_t rindex = (double) rand() / RAND_MAX * (sizeof OBJECT_URL_CHARSET - 1);
-        *(dest + i) = OBJECT_URL_CHARSET[rindex];
-    }
-    *(dest + OBJECT_URL_SIZE) = '\0';  // null-terminator
-}
-
-static void tjs__object_url_free(const TJSObjectURL *obj_url) {
-    JS_FreeValue(obj_url->ctx, obj_url->obj);
+static void tjs__object_url_free(TJSObjectURL *obj_url) {
     HASH_DEL(BLOBS_STORE, obj_url);
-}
-
-void tjs__blobstore_init() {
-    srand(time(NULL));  // Seed the random number generator
+    JS_FreeCString(obj_url->ctx, obj_url->url);
+    JS_FreeCString(obj_url->ctx, obj_url->blob);
+    JS_FreeContext(obj_url->ctx);
+    tjs__free(obj_url);
+    obj_url = NULL;
 }
 
 void tjs__blobstore_destroy() {
@@ -42,7 +29,7 @@ void tjs__blobstore_destroy() {
     BLOBS_STORE = NULL;
 }
 
-const TJSObjectURL *tjs__get_objecturl_object(const char *url) {
+TJSObjectURL *tjs__get_objecturl_object(const char *url) {
     TJSObjectURL *obj_url = NULL;
     HASH_FIND_STR(BLOBS_STORE, url, obj_url);
     return obj_url;
@@ -54,46 +41,76 @@ bool tjs__is_objecturl_url(const char *url) {
 
 static JSValue tjs_createObjectURL(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
     TJSObjectURL *obj_url;
+    JSValue text;
+    JSValue text_func;
 
-    if (argc < 1) {
+    if (argc < 2 || !JS_IsObject(argv[0]) || !JS_IsString(argv[1])){
         return JS_EXCEPTION;
     }
 
-    obj_url = malloc(sizeof(struct TJSObjectURL));
+    obj_url = tjs__malloc(sizeof(struct TJSObjectURL));
     if (!obj_url) {
         return JS_EXCEPTION;
     }
 
-    generate_random_url(obj_url->url);
-    obj_url->obj = JS_DupValue(ctx, argv[0]);
+    text_func = JS_GetPropertyStr(ctx, argv[0], "text");
+    if (JS_IsFunction(ctx, text_func)) {
+        JSValue text_promise = JS_Call(ctx, text_func, argv[0], 0, NULL);
+        int state;
+
+        for (;;) {
+            state = JS_PromiseState(ctx, text_promise);
+            if (state == JS_PROMISE_FULFILLED) {
+                text = JS_PromiseResult(ctx, text_promise);
+                break;
+            } else if (state == JS_PROMISE_REJECTED) {
+                text = JS_Throw(ctx, JS_PromiseResult(ctx, text_promise));
+                break;
+            } else if (state == JS_PROMISE_PENDING) {
+                JSContext *ctx1;
+                int err;
+                err = JS_ExecutePendingJob(JS_GetRuntime(ctx), &ctx1);
+                if (err < 0) {
+                    tjs_dump_error(ctx1);
+                }
+            } else {
+                /* not a promise */
+                break;
+            }
+        }
+    }
+
+    if (!JS_IsString(text)) {
+        tjs__free(obj_url);
+        return JS_EXCEPTION;
+    }
+
     obj_url->ctx = ctx;
+    obj_url->blob = JS_ToCString(ctx, text);
+    obj_url->url = JS_ToCString(ctx, argv[1]);
 
     HASH_ADD_STR(BLOBS_STORE, url, obj_url);
-
-
-    tjs__get_objecturl_object(obj_url->url);
 
     return JS_NewString(ctx, obj_url->url);
 }
 
-
 static JSValue tjs_revokeObjectURL(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
     TJSRuntime *qrt = JS_GetContextOpaque(ctx);
     CHECK_NOT_NULL(qrt);
+    const char *url;
 
     if (argc < 1) {
         return JS_EXCEPTION;
     }
 
-    const TJSObjectURL *obj_url = tjs__get_objecturl_object(JS_ToCString(ctx, argv[0]));
+    url = JS_ToCString(ctx, argv[0]);
+    TJSObjectURL *obj_url = tjs__get_objecturl_object(url);
 
-    if (obj_url == NULL) {
-        return JS_UNDEFINED;
+    if (obj_url != NULL) {
+        tjs__object_url_free(obj_url);
     }
 
-
-    tjs__object_url_free(obj_url);
-
+    JS_FreeCString(ctx, url);
     return JS_UNDEFINED;
 }
 

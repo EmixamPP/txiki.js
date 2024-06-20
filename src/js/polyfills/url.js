@@ -8,15 +8,13 @@ globalThis.URLPattern = URLPattern;
 globalThis.URLSearchParams = URLSearchParams;
 
 // TODO: straggly, without the wrapped console.log, the runtime will abort
-// so that we cannot write:
-// globalThis.URL.createObjectURL = core.createObjectURL;
-// globalThis.URL.revokeObjectURL = core.revokeObjectURL;
 // more investigation is needed
 globalThis.URL.createObjectURL = (object) => {
-    console.log('createObjectURL', object);
-    return core.createObjectURL(object);
+    console.log('');
+    const url = `blob:${crypto.randomUUID()}`;
+    return core.createObjectURL(object, url);
 }
 globalThis.URL.revokeObjectURL = (url) => {
-    console.log('revokeObjectURL', url);
+    console.log('');
     return core.revokeObjectURL(url);
 }

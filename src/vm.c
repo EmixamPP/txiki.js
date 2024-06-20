@@ -488,32 +488,13 @@ int tjs__load_file(JSContext *ctx, DynBuf *dbuf, const char *filename) {
 int tjs__load_objecturl(JSContext *ctx, DynBuf *dbuf, const char *url) {
     int r = 1;
     int blob_size;
-    const char *blob;
-    JSValue text_func;
-    JSValue text;
     const TJSObjectURL *obj_url = tjs__get_objecturl_object(url);
-    ctx = obj_url->ctx;
 
     if (!obj_url) {
         return r;
     }
-
-    text_func = JS_GetPropertyStr(ctx, obj_url->obj, "text");
-    if (JS_IsFunction(ctx, text_func)) {
-      text = JS_Call(ctx, text_func, obj_url->obj, 0, NULL);
-    }
-
-    if (JS_IsString(text) || true) {
-        blob = JS_ToCString(ctx, text);
-        blob_size = strlen(blob);
-
-        if (blob_size > 0) {
-            r = dbuf_put(dbuf, (const uint8_t *) blob, blob_size);
-        }
-    }
-
-    JS_FreeValue(ctx, text_func);
-    JS_FreeValue(ctx, text);
+    blob_size = strlen(obj_url->blob);
+    r = dbuf_put(dbuf, (const uint8_t *) obj_url->blob, blob_size);
 
     return r;
 }
@@ -522,11 +503,13 @@ JSValue TJS_EvalModule(JSContext *ctx, const char *filename, bool is_main) {
     DynBuf dbuf;
     size_t dbuf_size;
     int r;
+    JS_BOOL use_realpath = TRUE;
     JSValue ret;
 
     tjs_dbuf_init(ctx, &dbuf);
     if (tjs__is_objecturl_url(filename)) {
         r = tjs__load_objecturl(ctx, &dbuf, filename);
+        use_realpath = FALSE;
     } else {
         r = tjs__load_file(ctx, &dbuf, filename);
     }
@@ -545,7 +528,7 @@ JSValue TJS_EvalModule(JSContext *ctx, const char *filename, bool is_main) {
     /* Compile then run to be able to set import.meta */
     ret = JS_Eval(ctx, (char *) dbuf.buf, dbuf_size - 1, filename, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     if (!JS_IsException(ret)) {
-        js_module_set_import_meta(ctx, ret, TRUE, is_main);
+        js_module_set_import_meta(ctx, ret, use_realpath, is_main);
         ret = JS_EvalFunction(ctx, ret);
     }
 
