@@ -71,7 +71,6 @@ typedef struct {
 
 static JSValue worker_eval(JSContext *ctx, int argc, JSValue *argv) {
     const char *filename;
-    const char *blob;
     JSValue ret;
 
     filename = JS_ToCString(ctx, argv[0]);
@@ -80,8 +79,8 @@ static JSValue worker_eval(JSContext *ctx, int argc, JSValue *argv) {
         goto error;
     }
 
-    blob = JS_ToCString(ctx, argv[1]);
-    if (blob) {
+    if (!JS_IsUndefined(argv[1])) {
+        const char *blob = JS_ToCString(ctx, argv[1]);
         ret = TJS_EvalModuleContent(ctx, filename, false, false, blob, strlen(blob));
         JS_FreeCString(ctx, blob);
     } else {
