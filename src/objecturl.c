@@ -1,4 +1,4 @@
-#include "blob_store.h"
+#include "objecturl.h"
 
 #include <string.h>
 

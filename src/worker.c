@@ -22,8 +22,8 @@
  * THE SOFTWARE.
  */
 
-#include "blob_store.h"
 #include "mem.h"
+#include "objecturl.h"
 #include "private.h"
 #include "tjs.h"
 
