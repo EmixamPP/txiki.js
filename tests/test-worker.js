@@ -9,8 +9,8 @@ const timer = setTimeout(() => {
     assert.fail('Timeout out waiting for worker');
 }, 1000);
 w.onmessage = event => {
+    clearTimeout(timer);
+    w.terminate();
     const recvData = JSON.stringify(event.data);
     assert.eq(data, recvData, 'Message received matches');
-    w.terminate();
-    clearTimeout(timer);
 };
