@@ -504,7 +504,6 @@ JSValue TJS_EvalModuleContent(JSContext *ctx, const char *filename, bool is_main
 }
 
 JSValue TJS_EvalModule(JSContext *ctx, const char *filename, bool is_main) {
-    printf("TJS_EvalModule: %s\n", filename);
     DynBuf dbuf;
     size_t dbuf_size;
     int r;
