@@ -9,6 +9,7 @@ const w = new Worker(url);
 URL.revokeObjectURL(url);
 const timer = setTimeout(() => {
     w.terminate();
+    assert.fail('Timeout out waiting for worker');
 }, 1000);
 w.onmessage = event => {
     const recvData = JSON.stringify(event.data);

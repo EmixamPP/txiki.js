@@ -6,6 +6,7 @@ const data = JSON.stringify({foo: 42, bar: 'baz!'});
 const w = new Worker(path.join(import.meta.dirname, 'helpers', 'worker.js'));
 const timer = setTimeout(() => {
     w.terminate();
+    assert.fail('Timeout out waiting for worker');
 }, 1000);
 w.onmessage = event => {
     const recvData = JSON.stringify(event.data);
