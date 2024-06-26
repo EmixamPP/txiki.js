@@ -35,7 +35,6 @@
 #include <uv.h>
 
 typedef struct TJSTimer TJSTimer;
-typedef struct TJSObjectURL TJSObjectURL;
 
 struct TJSRuntime {
     TJSRunOptions options;
@@ -62,7 +61,6 @@ struct TJSRuntime {
     } timers;
 };
 
-void tjs__mod_blobstore_init(JSContext *ctx, JSValue ns);
 void tjs__mod_dns_init(JSContext *ctx, JSValue ns);
 void tjs__mod_error_init(JSContext *ctx, JSValue ns);
 void tjs__mod_ffi_init(JSContext *ctx, JSValue ns);
@@ -109,5 +107,6 @@ uv_loop_t *TJS_GetLoop(TJSRuntime *qrt);
 TJSRuntime *TJS_NewRuntimeWorker(void);
 TJSRuntime *TJS_NewRuntimeInternal(bool is_worker, TJSRunOptions *options);
 JSValue TJS_EvalModule(JSContext *ctx, const char *filename, bool is_main);
+JSValue TJS_EvalModuleContent(JSContext *ctx, const char *filename, bool is_main, bool use_realpath, const char *content, size_t len);
 
 #endif

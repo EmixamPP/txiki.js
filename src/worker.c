@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  */
 
+#include "blob_store.h"
 #include "mem.h"
 #include "private.h"
 #include "tjs.h"
@@ -44,6 +45,7 @@ static JSClassID tjs_worker_class_id;
 
 typedef struct {
     const char *path;
+    const char *blob;
     uv_os_sock_t channel_fd;
     uv_sem_t *sem;
     TJSRuntime *wrt;
@@ -69,6 +71,7 @@ typedef struct {
 
 static JSValue worker_eval(JSContext *ctx, int argc, JSValue *argv) {
     const char *filename;
+    const char *blob;
     JSValue ret;
 
     filename = JS_ToCString(ctx, argv[0]);
@@ -77,7 +80,13 @@ static JSValue worker_eval(JSContext *ctx, int argc, JSValue *argv) {
         goto error;
     }
 
-    ret = TJS_EvalModule(ctx, filename, false);
+    blob = JS_ToCString(ctx, argv[1]);
+    if (blob) {
+        ret = TJS_EvalModuleContent(ctx, filename, false, false, blob, strlen(blob));
+        JS_FreeCString(ctx, blob);
+    } else {
+        ret = TJS_EvalModule(ctx, filename, false);
+    }
     JS_FreeCString(ctx, filename);
 
     if (JS_IsException(ret)) {
@@ -119,7 +128,14 @@ static void worker_entry(void *arg) {
 
     /* Load the file and eval the file when the loop runs. */
     JSValue filename = JS_NewString(ctx, wd->path);
-    CHECK_EQ(JS_EnqueueJob(ctx, worker_eval, 1, (JSValue *) &filename), 0);
+    JSValue blob = JS_UNDEFINED;
+    if (wd->blob)
+        blob = JS_NewString(ctx, wd->blob);
+    JSValue args[2] = { filename, blob };
+
+    CHECK_EQ(JS_EnqueueJob(ctx, worker_eval, 2, (JSValue *) &args), 0);
+
+    JS_FreeValue(ctx, blob);
     JS_FreeValue(ctx, filename);
 
     /* Notify the caller we are setup.  */
@@ -255,13 +271,25 @@ static JSValue tjs_new_worker(JSContext *ctx, uv_os_sock_t channel_fd, bool is_m
 
 static JSValue tjs_worker_constructor(JSContext *ctx, JSValue new_target, int argc, JSValue *argv) {
     const char *path = JS_ToCString(ctx, argv[0]);
+    const char *blob = NULL;
     if (!path)
         return JS_EXCEPTION;
+    else if (tjs__is_objecturl_url(path)) {
+        JSValue text = tjs__get_objecturl_text(ctx, path);
+        if (!JS_IsString(text)) {
+            JS_FreeValue(ctx, text);
+            JS_FreeCString(ctx, path);
+            return JS_EXCEPTION;
+        }
+        blob = JS_ToCString(ctx, text);
+        JS_FreeValue(ctx, text);
+    }
 
     uv_os_sock_t fds[2];
     int r = uv_socketpair(SOCK_STREAM, 0, fds, UV_NONBLOCK_PIPE, UV_NONBLOCK_PIPE);
     if (r != 0) {
         JS_FreeCString(ctx, path);
+        JS_FreeCString(ctx, blob);
         return tjs_throw_errno(ctx, r);
     }
 
@@ -270,6 +298,7 @@ static JSValue tjs_worker_constructor(JSContext *ctx, JSValue new_target, int ar
         close(fds[0]);
         close(fds[1]);
         JS_FreeCString(ctx, path);
+        JS_FreeCString(ctx, blob);
         return JS_EXCEPTION;
     }
 
@@ -279,7 +308,7 @@ static JSValue tjs_worker_constructor(JSContext *ctx, JSValue new_target, int ar
     uv_sem_t sem;
     CHECK_EQ(uv_sem_init(&sem, 0), 0);
 
-    worker_data_t worker_data = { .channel_fd = fds[1], .path = path, .sem = &sem, .wrt = NULL };
+    worker_data_t worker_data = { .channel_fd = fds[1], .path = path, .blob = blob, .sem = &sem, .wrt = NULL };
 
     CHECK_EQ(uv_thread_create(&w->tid, worker_entry, (void *) &worker_data), 0);
 
@@ -288,6 +317,7 @@ static JSValue tjs_worker_constructor(JSContext *ctx, JSValue new_target, int ar
     uv_sem_destroy(&sem);
 
     JS_FreeCString(ctx, path);
+    JS_FreeCString(ctx, blob);
 
     uv_update_time(tjs_get_loop(ctx));
 

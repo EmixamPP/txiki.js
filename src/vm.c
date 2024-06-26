@@ -22,7 +22,6 @@
  * THE SOFTWARE.
  */
 
-#include "blob_store.h"
 #include "mem.h"
 #include "private.h"
 #include "tjs.h"
@@ -107,7 +106,6 @@ static char **tjs__argv = NULL;
 
 
 static void tjs__bootstrap_core(JSContext *ctx, JSValue ns) {
-    tjs__mod_blobstore_init(ctx, ns);
     tjs__mod_dns_init(ctx, ns);
     tjs__mod_error_init(ctx, ns);
     tjs__mod_ffi_init(ctx, ns);
@@ -485,35 +483,35 @@ int tjs__load_file(JSContext *ctx, DynBuf *dbuf, const char *filename) {
     return r;
 }
 
-int tjs__load_objecturl(JSContext *ctx, DynBuf *dbuf, const char *url) {
-    int r = 1;
-    int blob_size;
-    const TJSObjectURL *obj_url = tjs__get_objecturl_object(url);
-
-    if (!obj_url) {
-        return r;
+JSValue TJS_EvalModuleContent(JSContext *ctx, const char *filename, bool is_main, bool use_real_path, const char *content, size_t len) {
+    /* Compile then run to be able to set import.meta */
+    JSValue ret = JS_Eval(ctx, content, len, filename, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    if (!JS_IsException(ret)) {
+        js_module_set_import_meta(ctx, ret, use_real_path, is_main);
+        ret = JS_EvalFunction(ctx, ret);
     }
-    blob_size = strlen(obj_url->blob);
-    r = dbuf_put(dbuf, (const uint8_t *) obj_url->blob, blob_size);
 
-    return r;
+    /* Emit window 'load' event. */
+    if (!JS_IsException(ret) && is_main) {
+        static char emit_window_load[] = "window.dispatchEvent(new Event('load'));";
+        JSValue ret1 = JS_Eval(ctx, emit_window_load, strlen(emit_window_load), "<global>", JS_EVAL_TYPE_GLOBAL);
+        if (JS_IsException(ret1)) {
+            tjs_dump_error(ctx);
+        }
+    }
+
+    return ret;
 }
 
 JSValue TJS_EvalModule(JSContext *ctx, const char *filename, bool is_main) {
+    printf("TJS_EvalModule: %s\n", filename);
     DynBuf dbuf;
     size_t dbuf_size;
     int r;
-    JS_BOOL use_realpath = TRUE;
     JSValue ret;
 
     tjs_dbuf_init(ctx, &dbuf);
-    if (tjs__is_objecturl_url(filename)) {
-        r = tjs__load_objecturl(ctx, &dbuf, filename);
-        use_realpath = FALSE;
-    } else {
-        r = tjs__load_file(ctx, &dbuf, filename);
-    }
-
+    r = tjs__load_file(ctx, &dbuf, filename);
     if (r != 0) {
         dbuf_free(&dbuf);
         JS_ThrowReferenceError(ctx, "could not load '%s' - %s: %s", filename, uv_err_name(r), uv_strerror(r));
@@ -526,20 +524,7 @@ JSValue TJS_EvalModule(JSContext *ctx, const char *filename, bool is_main) {
     dbuf_putc(&dbuf, '\0');
 
     /* Compile then run to be able to set import.meta */
-    ret = JS_Eval(ctx, (char *) dbuf.buf, dbuf_size - 1, filename, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
-    if (!JS_IsException(ret)) {
-        js_module_set_import_meta(ctx, ret, use_realpath, is_main);
-        ret = JS_EvalFunction(ctx, ret);
-    }
-
-    /* Emit window 'load' event. */
-    if (!JS_IsException(ret) && is_main) {
-        static char emit_window_load[] = "window.dispatchEvent(new Event('load'));";
-        JSValue ret1 = JS_Eval(ctx, emit_window_load, strlen(emit_window_load), "<global>", JS_EVAL_TYPE_GLOBAL);
-        if (JS_IsException(ret1)) {
-            tjs_dump_error(ctx);
-        }
-    }
+    ret = TJS_EvalModuleContent(ctx, filename, is_main, TRUE, (char *) dbuf.buf, dbuf_size - 1);
 
     dbuf_free(&dbuf);
     return ret;

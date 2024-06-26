@@ -35,8 +35,6 @@ int main(int argc, char **argv) {
 
     int exit_code = TJS_Run(qrt);
 
-    tjs__blobstore_destroy();
-
     TJS_FreeRuntime(qrt);
 
     return exit_code;
