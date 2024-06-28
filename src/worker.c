@@ -23,7 +23,6 @@
  */
 
 #include "mem.h"
-#include "objecturl.h"
 #include "private.h"
 #include "tjs.h"
 
@@ -127,9 +126,7 @@ static void worker_entry(void *arg) {
 
     /* Load the file and eval the file when the loop runs. */
     JSValue filename = JS_NewString(ctx, wd->path);
-    JSValue blob = JS_UNDEFINED;
-    if (wd->blob)
-        blob = JS_NewString(ctx, wd->blob);
+    JSValue blob = wd->blob ? JS_NewString(ctx, wd->blob) : JS_UNDEFINED;
     JSValue args[2] = { filename, blob };
 
     CHECK_EQ(JS_EnqueueJob(ctx, worker_eval, 2, (JSValue *) &args), 0);
@@ -270,25 +267,13 @@ static JSValue tjs_new_worker(JSContext *ctx, uv_os_sock_t channel_fd, bool is_m
 
 static JSValue tjs_worker_constructor(JSContext *ctx, JSValue new_target, int argc, JSValue *argv) {
     const char *path = JS_ToCString(ctx, argv[0]);
-    const char *blob = NULL;
     if (!path)
         return JS_EXCEPTION;
-    else if (tjs__is_objecturl_url(path)) {
-        JSValue text = tjs__get_objecturl_text(ctx, path);
-        if (!JS_IsString(text)) {
-            JS_FreeValue(ctx, text);
-            JS_FreeCString(ctx, path);
-            return JS_EXCEPTION;
-        }
-        blob = JS_ToCString(ctx, text);
-        JS_FreeValue(ctx, text);
-    }
 
     uv_os_sock_t fds[2];
     int r = uv_socketpair(SOCK_STREAM, 0, fds, UV_NONBLOCK_PIPE, UV_NONBLOCK_PIPE);
     if (r != 0) {
         JS_FreeCString(ctx, path);
-        JS_FreeCString(ctx, blob);
         return tjs_throw_errno(ctx, r);
     }
 
@@ -297,7 +282,6 @@ static JSValue tjs_worker_constructor(JSContext *ctx, JSValue new_target, int ar
         close(fds[0]);
         close(fds[1]);
         JS_FreeCString(ctx, path);
-        JS_FreeCString(ctx, blob);
         return JS_EXCEPTION;
     }
 
@@ -306,6 +290,8 @@ static JSValue tjs_worker_constructor(JSContext *ctx, JSValue new_target, int ar
     /* We will wait for the worker to complete the creation of the VM. */
     uv_sem_t sem;
     CHECK_EQ(uv_sem_init(&sem, 0), 0);
+
+    const char *blob = JS_IsUndefined(argv[1]) ? NULL : JS_ToCString(ctx, argv[1]);
 
     worker_data_t worker_data = { .channel_fd = fds[1], .path = path, .blob = blob, .sem = &sem, .wrt = NULL };
 
@@ -428,6 +414,6 @@ void tjs__mod_worker_init(JSContext *ctx, JSValue ns) {
     JS_SetClassProto(ctx, tjs_worker_class_id, proto);
 
     /* Worker object */
-    obj = JS_NewCFunction2(ctx, tjs_worker_constructor, "Worker", 1, JS_CFUNC_constructor, 0);
+    obj = JS_NewCFunction2(ctx, tjs_worker_constructor, "Worker", 2, JS_CFUNC_constructor, 0);
     JS_DefinePropertyValueStr(ctx, ns, "Worker", obj, JS_PROP_C_W_E);
 }

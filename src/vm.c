@@ -483,7 +483,12 @@ int tjs__load_file(JSContext *ctx, DynBuf *dbuf, const char *filename) {
     return r;
 }
 
-JSValue TJS_EvalModuleContent(JSContext *ctx, const char *filename, bool is_main, bool use_real_path, const char *content, size_t len) {
+JSValue TJS_EvalModuleContent(JSContext *ctx,
+                              const char *filename,
+                              bool is_main,
+                              bool use_real_path,
+                              const char *content,
+                              size_t len) {
     /* Compile then run to be able to set import.meta */
     JSValue ret = JS_Eval(ctx, content, len, filename, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     if (!JS_IsException(ret)) {
@@ -522,7 +527,6 @@ JSValue TJS_EvalModule(JSContext *ctx, const char *filename, bool is_main) {
     /* Add null termination, required by JS_Eval. */
     dbuf_putc(&dbuf, '\0');
 
-    /* Compile then run to be able to set import.meta */
     ret = TJS_EvalModuleContent(ctx, filename, is_main, TRUE, (char *) dbuf.buf, dbuf_size - 1);
 
     dbuf_free(&dbuf);

@@ -9,29 +9,41 @@ class Worker extends EventTarget {
     constructor(path) {
         super();
 
-        const worker = new _Worker(path);
+        const resolve_worker = (resolve, path, blob) => {
+            const worker = new _Worker(path, blob);
 
-        worker.onmessage = msg => {
-            this.dispatchEvent(new MessageEvent('message', msg));
+            worker.onmessage = msg => {
+                this.dispatchEvent(new MessageEvent('message', msg));
+            };
+
+            worker.onmessageerror = msgerror => {
+                this.dispatchEvent(new MessageEvent('messageerror', msgerror));
+            };
+
+            worker.onerror = error => {
+                this.dispatchEvent(new ErrorEvent(error));
+            };
+
+            resolve(worker);
         };
 
-        worker.onmessageerror = msgerror => {
-            this.dispatchEvent(new MessageEvent('messageerror', msgerror));
-        };
+        this[kWorker] = new Promise((resolve, _) => {
+            const maybeObjectURL = URL.getObjectURL(path);
 
-        worker.onerror = error => {
-            this.dispatchEvent(new ErrorEvent(error));
-        };
-
-        this[kWorker] = worker;
+            if (maybeObjectURL) {
+                maybeObjectURL.text().then(blob => resolve_worker(resolve, path, blob));
+            } else {
+                resolve_worker(resolve, path);
+            }
+        });
     }
 
     postMessage(message) {
-        this[kWorker].postMessage(message);
+        this[kWorker].then(worker => worker.postMessage(message));
     }
 
     terminate() {
-        this[kWorker].terminate();
+        this[kWorker].then(worker => worker.terminate());
     }
 }
 
