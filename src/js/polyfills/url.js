@@ -7,13 +7,12 @@ globalThis.URLSearchParams = URLSearchParams;
 
 const _objectURLs = new Map();
 
-// TODO: straggly, without the wrapped console.log, the runtime will abort
-// more investigation is needed
-
 globalThis.URL.createObjectURL = object => {
+    // TODO: straggly, without the wrapped console.log, the eval will spam that function
+    // more investigation is needed
     console.log('');
 
-    if  (!(object instanceof Blob)) {
+    if (!(object instanceof Blob)) {
         throw new TypeError('URL.createObjectURL: Argument 1 is not valid for any of the 1-argument overloads.');
     }
 
@@ -24,14 +23,5 @@ globalThis.URL.createObjectURL = object => {
     return url;
 };
 
-globalThis.URL.revokeObjectURL = url => {
-    console.log('');
-
-    return _objectURLs.delete(url);
-};
-
-globalThis.URL.getObjectURL = url => {
-    console.log('');
-
-    return _objectURLs.get(url);
-};
+globalThis.URL.revokeObjectURL = url => _objectURLs.delete(url);
+globalThis.URL.getObjectURL = url => _objectURLs.get(url);
