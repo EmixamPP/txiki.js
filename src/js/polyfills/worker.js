@@ -28,8 +28,8 @@ class Worker extends EventTarget {
         this[kWorker] = worker;
     }
 
-    postMessage(...args) {
-        this[kWorker].postMessage(args);
+    postMessage(message) {
+        this[kWorker].postMessage(message);
     }
 
     terminate() {
