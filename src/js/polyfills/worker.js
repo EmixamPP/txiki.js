@@ -9,41 +9,31 @@ class Worker extends EventTarget {
     constructor(path) {
         super();
 
-        const resolve_worker = (resolve, path, blob) => {
-            const worker = new _Worker(path, blob);
+        const url = URL.getObjectURL(path); // undefined if path is not an ObjectURL
+        const blob_content = url?.[Symbol.blobTextSync];
+        const worker = new _Worker(path, blob_content);
 
-            worker.onmessage = msg => {
-                this.dispatchEvent(new MessageEvent('message', msg));
-            };
-
-            worker.onmessageerror = msgerror => {
-                this.dispatchEvent(new MessageEvent('messageerror', msgerror));
-            };
-
-            worker.onerror = error => {
-                this.dispatchEvent(new ErrorEvent(error));
-            };
-
-            resolve(worker);
+        worker.onmessage = msg => {
+            this.dispatchEvent(new MessageEvent('message', msg));
         };
 
-        this[kWorker] = new Promise((resolve, _) => {
-            const maybeObjectURL = URL.getObjectURL(path);
+        worker.onmessageerror = msgerror => {
+            this.dispatchEvent(new MessageEvent('messageerror', msgerror));
+        };
 
-            if (maybeObjectURL) {
-                maybeObjectURL.text().then(blob => resolve_worker(resolve, path, blob));
-            } else {
-                resolve_worker(resolve, path);
-            }
-        });
+        worker.onerror = error => {
+            this.dispatchEvent(new ErrorEvent(error));
+        };
+
+        this[kWorker] = worker;
     }
 
-    postMessage(message) {
-        this[kWorker].then(worker => worker.postMessage(message));
+    postMessage(...args) {
+        this[kWorker].postMessage(args);
     }
 
     terminate() {
-        this[kWorker].then(worker => worker.terminate());
+        this[kWorker].terminate();
     }
 }
 

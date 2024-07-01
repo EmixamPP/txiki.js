@@ -228,6 +228,17 @@ class Blob {
     get [Symbol.toStringTag] () {
         return 'Blob';
     }
+
+    get [Symbol.blobTextSync]() {
+        let text = '';
+        for (const part of this.#parts) {
+            for (const key in part) {
+                text += String.fromCharCode(part[key]);
+            }
+        }
+        return text;
+    }
+
 }
 
 Object.defineProperties(Blob.prototype, {
