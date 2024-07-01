@@ -2,16 +2,34 @@ const core = globalThis[Symbol.for('tjs.internal.core')];
 const _Worker = core.Worker;
 
 import { defineEventAttribute } from './event-target';
+import { kBlobGetParts } from './blob';
 
 const kWorker = Symbol('kWorker');
+
+function blobTextSync(blob) {
+    const decoder = new TextDecoder();
+    let str = '';
+
+    for (const part of blob[kBlobGetParts]) {
+        if (part instanceof Blob) {
+            str += blobTextSync(part);
+        } else {
+            str += decoder.decode(part, { stream: true });
+        }
+    }
+
+    str += decoder.decode();
+
+    return str;
+}
 
 class Worker extends EventTarget {
     constructor(path) {
         super();
 
-        const url = URL.getObjectURL(path); // undefined if path is not an ObjectURL
-        const blob_content = url?.[Symbol.blobTextSync];
-        const worker = new _Worker(path, blob_content);
+        const blob = URL.getObjectURL(path);
+        const blob_text = blob ? blobTextSync(blob) : undefined;
+        const worker = new _Worker(path, blob_text);
 
         worker.onmessage = msg => {
             this.dispatchEvent(new MessageEvent('message', msg));
